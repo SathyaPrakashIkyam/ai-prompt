@@ -1,0 +1,150 @@
+import { useState, useRef, useEffect } from "react";
+import { useImmer } from "use-immer";
+import api from "@/api";
+import { parseSSEStream } from "@/utils";
+import ChatMessages from "@/components/ChatMessages";
+import ChatInput from "@/components/ChatInput";
+import { motion, AnimatePresence } from "framer-motion";
+
+function Chatbot() {
+  const [chatId, setChatId] = useState(null);
+  const [messages, setMessages] = useImmer([]);
+  const [newMessage, setNewMessage] = useState("");
+
+  const isLoading = messages.length && messages[messages.length - 1].loading;
+
+  async function submitNewMessage() {
+    const trimmedMessage = newMessage.trim();
+    if (!trimmedMessage || isLoading) return;
+
+    // add user + assistant placeholder
+    setMessages((draft) => [
+      ...draft,
+      { role: "user", content: trimmedMessage },
+      { role: "assistant", parts: [], loading: true },
+    ]);
+    setNewMessage("");
+
+    let chatIdOrNew = chatId;
+    try {
+      if (!chatId) {
+        const { id } = await api.createChat();
+        setChatId(id);
+        chatIdOrNew = id;
+      }
+
+      const stream = await api.sendChatMessage(chatIdOrNew, trimmedMessage);
+
+      for await (const chunk of parseSSEStream(stream)) {
+
+
+        setMessages((draft) => {
+          const last = draft[draft.length - 1];
+          if (!last.content) last.content = "";
+       
+          // Always normalize to string
+          let newText = String(chunk?.content ?? chunk);
+
+
+          // Append with space if needed
+          try {
+            if (
+              last.content.length > 0 &&
+              !last.content.endsWith(" ") &&
+              !newText.startsWith(" ")
+            ) {
+              last.content += " " + newText;
+            } else {
+
+              last.content += newText;
+            }
+          }
+          catch (e) {
+            last.content += " " + newText;
+            console.log(e);
+          }
+        });
+      }
+
+
+      setMessages((draft) => {
+        draft[draft.length - 1].loading = false;
+      });
+
+    } catch (err) {
+      console.log(err);
+      setMessages((draft) => {
+        draft[draft.length - 1].loading = false;
+        draft[draft.length - 1].error = true;
+      });
+    }
+  }
+
+  const messagesEndRef = useRef(null);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  return (
+    <div
+      className={`flex flex-col h-screen w-screen ${messages.length === 0 ? "justify-center" : ""
+        }`}
+    >
+      {/* Chat area */}
+      <div
+        className={`${messages.length === 0 ? "" : "flex-1 overflow-y-auto"
+          } px-4 pl-32 pr-32`}
+      >
+        <AnimatePresence mode="wait">
+          {messages.length === 0 ? (
+            // Empty state
+            <motion.div
+              key="empty"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.4 }}
+              className="text-center flex flex-col items-center justify-center h-full"
+            >
+              <h1 className="text-xl font-medium mb-6 text-black-200">
+                Ready when you are.
+              </h1>
+              <h1 className="text-xl font-medium mb-6 text-gray-600">
+                What's on the agenda today?
+              </h1>
+            </motion.div>
+          ) : (
+            // Chat messages
+            <motion.div
+              key="chat"
+              className="w-full"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              transition={{ duration: 0.4 }}
+            >
+              <ChatMessages messages={messages} isLoading={isLoading} />
+              <div ref={messagesEndRef} />
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      {/* Chat input */}
+      <div
+        className={`pl-32 pr-32 w-full ${messages.length > 0 ? "sticky bottom-0 " : ""
+          }`}
+      >
+        <ChatInput
+          newMessage={newMessage}
+          isLoading={isLoading}
+          setNewMessage={setNewMessage}
+          submitNewMessage={submitNewMessage}
+        />
+      </div>
+    </div>
+  );
+}
+
+export default Chatbot;
