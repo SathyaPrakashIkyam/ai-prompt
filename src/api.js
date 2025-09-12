@@ -11,7 +11,7 @@ async function createChat() {
   // }
   // return data;
 
-  
+
   return {
     id: "chat-12345",
     createdAt: new Date().toISOString(),
@@ -19,7 +19,7 @@ async function createChat() {
   };
 }
 
-async function sendChatMessage(chatId, message) {
+export async function* sendChatMessage(chatId, message) {
   console.log(message);
   const res = await fetch("https://apiservices.cfapps.us10-001.hana.ondemand.com/query", {
     method: 'POST',
@@ -30,27 +30,44 @@ async function sendChatMessage(chatId, message) {
   });
 
   if (res) {
-    // return Promise.reject({ status: res.status, data: await res.json() });
-    const encoder = new TextEncoder();
     const data = await res.json();
-    console.log(data);
-    const stream = new ReadableStream({
-      async start(controller) {
-        const paragraph = data.paragraph ?? ""
+    // console.log(data);
+    const response = data.paragraph ?? ""
+    const words = response.split(" ");
 
-        // Split into words
-        const words = paragraph.split(" ");
+    for (const word of words) {
+      await new Promise((r) => setTimeout(r, 1)); // simulate delay
+      yield {
+        chatId,
+        message,
+        replyChunk: word + " ", // send chunk
+        createdAt: new Date().toISOString()
+      };
+    }
 
-        for (const word of words) {
-          controller.enqueue(encoder.encode(`data: ${word}\n\n`));
-          await new Promise((r) => setTimeout(r, 100)); // simulate streaming delay
-        }
 
-        controller.close();
-      },
-    });
+    // return Promise.reject({ status: res.status, data: await res.json() });
+    // const encoder = new TextEncoder();
+    // const data = await res.json();
+    // console.log(data);
+    // const stream = new ReadableStream({
+    //   async start(controller) {
+    //     const paragraph = data.paragraph ?? ""
 
-    return stream;
+    //     // Split into words
+    //     const words = paragraph.split(" ");
+
+    //     for (const word of words) {
+    //       controller.enqueue(encoder.encode(`data: ${word}\n\n`));
+    //       await new Promise((r) => setTimeout(r, 100)); // simulate streaming delay
+    //     }
+
+    //     controller.close();
+    //   },
+    // });
+
+    // return stream;
+
   }
 }
 

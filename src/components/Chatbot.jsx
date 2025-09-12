@@ -32,39 +32,57 @@ function Chatbot() {
         setChatId(id);
         chatIdOrNew = id;
       }
-
-      const stream = await api.sendChatMessage(chatIdOrNew, trimmedMessage);
-
-      for await (const chunk of parseSSEStream(stream)) {
-
+      let reply = "";
+      const lastIdx = messages.length + 1;
+      setMessages((draft) => {
+        draft[lastIdx].loading = true;
+      });
+      for await (const chunk of api.sendChatMessage("chat-12345", trimmedMessage)) {
+        reply += chunk.replyChunk; // accumulate chunks
 
         setMessages((draft) => {
-          const last = draft[draft.length - 1];
-          if (!last.content) last.content = "";
-       
-          // Always normalize to string
-          let newText = String(chunk?.content ?? chunk);
-
-
-          // Append with space if needed
-          try {
-            if (
-              last.content.length > 0 &&
-              !last.content.endsWith(" ") &&
-              !newText.startsWith(" ")
-            ) {
-              last.content += " " + newText;
-            } else {
-
-              last.content += newText;
-            }
-          }
-          catch (e) {
-            last.content += " " + newText;
-            console.log(e);
-          }
+          draft[lastIdx].content = reply; // update assistant message
+          draft[lastIdx].loading = true;  // still loading
         });
       }
+
+      // Once streaming is done, mark loading as false
+      setMessages((draft) => {
+        draft[lastIdx].loading = false;
+      });
+
+      // const stream = await api.sendChatMessage(chatIdOrNew, trimmedMessage);
+
+      // for await (const chunk of parseSSEStream(stream)) {
+
+
+      //   setMessages((draft) => {
+      //     const last = draft[draft.length - 1];
+      //     if (!last.content) last.content = "";
+
+      //     // Always normalize to string
+      //     let newText = String(chunk?.content ?? chunk);
+
+
+      //     // Append with space if needed
+      //     try {
+      //       if (
+      //         last.content.length > 0 &&
+      //         !last.content.endsWith(" ") &&
+      //         !newText.startsWith(" ")
+      //       ) {
+      //         last.content += " " + newText;
+      //       } else {
+
+      //         last.content += newText;
+      //       }
+      //     }
+      //     catch (e) {
+      //       last.content += " " + newText;
+      //       console.log(e);
+      //     }
+      //   });
+      // }
 
 
       setMessages((draft) => {
